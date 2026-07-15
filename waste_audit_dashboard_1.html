@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Waste Audit Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --paper:#EAEDE7;
+    --paper-raised:#F6F8F3;
+    --ink:#1E2420;
+    --ink-soft:rgba(30,36,32,.62);
+    --ink-faint:rgba(30,36,32,.38);
+    --line:rgba(30,36,32,.13);
+    --red:#C82C2C;
+    --amber:#E0A400;
+    --green:#3F6B34;
+    --violet:#6E5296;
+    --blue:#3B6E8F;
+    --teal:#2F8577;
+    --grey:#9AA097;
+    --radius:6px;
+    --font-display:'Space Grotesk',-apple-system,'Segoe UI',sans-serif;
+    --font-body:'Inter',-apple-system,'Segoe UI',sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--paper);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;}
+  .app{display:flex;min-height:100vh;}
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{width:200px;flex:0 0 200px;background:var(--ink);color:var(--paper);display:flex;flex-direction:column;padding:22px 18px;position:sticky;top:0;height:100vh;}
+  .brand{font-family:var(--font-display);font-weight:700;font-size:16px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:2px;}
+  .brand-sub{font-size:11px;color:rgba(234,237,231,.55);letter-spacing:.06em;text-transform:uppercase;margin-bottom:30px;}
+  .side-nav{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;}
+  .side-nav li{padding:9px 10px;border-radius:4px;font-size:13px;color:rgba(234,237,231,.72);cursor:default;}
+  .side-nav li.active{background:rgba(234,237,231,.1);color:#fff;}
+  .side-spacer{flex:1;}
+  .side-note{font-size:10.5px;color:rgba(234,237,231,.4);line-height:1.5;}
+
+  /* ---------- Main ---------- */
+  .main{flex:1;min-width:0;padding:24px 28px 60px;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;}
+  .topbar h1{font-family:var(--font-display);font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em;}
+  .topbar-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .status-pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;padding:5px 10px;border-radius:20px;border:1px solid var(--line);background:var(--paper-raised);color:var(--ink-soft);}
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--grey);}
+  .status-pill.ok .status-dot{background:var(--green);}
+  .status-pill.err .status-dot{background:var(--red);}
+  .status-pill.loading .status-dot{background:var(--amber);}
+  select,button,input{font-family:var(--font-body);font-size:12.5px;}
+  .btn{border:1px solid var(--ink);background:var(--ink);color:var(--paper);padding:7px 14px;border-radius:4px;cursor:pointer;font-weight:600;letter-spacing:.02em;}
+  .btn:hover{opacity:.85;}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);}
+  label.chk{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);white-space:nowrap;}
+
+  /* ---------- Slicer bar ---------- */
+  .slicers{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;background:var(--paper-raised);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;}
+  .slicer{display:flex;flex-direction:column;gap:4px;}
+  .slicer-label{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);}
+  .slicer select,.slicer input[type=date]{padding:6px 9px;border-radius:4px;border:1px solid var(--line);background:var(--paper);color:var(--ink);}
+  .unit-toggle{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;}
+  .unit-toggle button{border:none;background:var(--paper);color:var(--ink-soft);padding:6px 14px;cursor:pointer;font-weight:600;}
+  .unit-toggle button.active{background:var(--ink);color:var(--paper);}
+  .slicer-checks{display:flex;flex-direction:column;gap:3px;padding-bottom:2px;}
+  .coverage-note{font-size:11px;color:var(--ink-faint);margin:-8px 0 14px 2px;}
+
+  /* ---------- KPI band ---------- */
+  .kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px;}
+  .kpi-card{background:var(--paper-raised);border:1px solid var(--line);border-left:4px solid var(--grey);border-radius:var(--radius);padding:14px 16px 12px;}
+  .kpi-card.c-green{border-left-color:var(--green);}
+  .kpi-card.c-red{border-left-color:var(--red);}
+  .kpi-card.c-amber{border-left-color:var(--amber);}
+  .kpi-card.c-violet{border-left-color:var(--violet);}
+  .kpi-card.c-blue{border-left-color:var(--blue);}
+  .kpi-card.c-teal{border-left-color:var(--teal);}
+  .kpi-label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px;}
+  .kpi-value{font-family:var(--font-mono);font-size:26px;font-weight:600;letter-spacing:-.01em;}
+  .kpi-sub{font-size:11px;color:var(--ink-faint);margin-top:3px;}
+
+  /* ---------- Panels ---------- */
+  .panel{background:var(--paper-raised);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px 14px;margin-bottom:16px;}
+  .panel-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .panel-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;gap:10px;flex-wrap:wrap;}
+  .panel-title{font-family:var(--font-display);font-weight:600;font-size:14px;}
+  .panel-note{font-size:11px;color:var(--ink-faint);}
+  .chart{width:100%;}
+  .chart-tall{height:340px;}
+  .chart-med{height:280px;}
+  .chart-sm{height:230px;}
+  .chart-map{height:340px;border-radius:4px;overflow:hidden;}
+  .empty-note{padding:30px 10px;text-align:center;color:var(--ink-faint);font-size:12.5px;}
+
+  /* ---------- Stream tabs & breakdown ---------- */
+  .stream-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+  .stream-tab{border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);padding:6px 14px;border-radius:20px;cursor:pointer;font-weight:600;font-size:12px;}
+  .stream-tab.active{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+  .breakdown-layout{display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start;}
+  .class-legend{display:flex;flex-direction:column;gap:5px;margin-top:10px;}
+  .legend-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink-soft);}
+  .legend-row b{font-family:var(--font-mono);font-weight:600;color:var(--ink);margin-left:auto;}
+  .swatch{width:10px;height:10px;border-radius:2px;flex:0 0 auto;}
+  .key-metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px;}
+  .key-metric{border:1px solid var(--line);border-radius:4px;padding:8px 10px;text-align:center;background:var(--paper);}
+  .key-metric .km-label{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);}
+  .key-metric .km-value{font-family:var(--font-mono);font-size:17px;font-weight:600;margin-top:2px;}
+  .key-metric .km-sub{font-size:10px;color:var(--ink-faint);}
+
+  /* ---------- Table ---------- */
+  .table-tools{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap;}
+  .table-tools input[type=text]{padding:7px 10px;border-radius:4px;border:1px solid var(--line);background:var(--paper);color:var(--ink);width:200px;}
+  .table-wrap{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);border-bottom:1px solid var(--line);padding:8px 10px;white-space:nowrap;}
+  tbody td{padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;font-family:var(--font-mono);font-size:12px;}
+  tbody td.wrap{white-space:normal;font-family:var(--font-body);}
+  tbody tr{cursor:pointer;}
+  tbody tr:hover{background:rgba(30,36,32,.035);}
+  .badge{display:inline-block;font-family:var(--font-body);font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;text-transform:capitalize;}
+  .badge.g{background:rgba(63,107,52,.13);color:var(--green);}
+  .badge.a{background:rgba(224,164,0,.15);color:#8a6800;}
+  .badge.n{background:rgba(30,36,32,.08);color:var(--ink-soft);}
+
+  /* ---------- Sankey legend ---------- */
+  .sankey-layout{display:flex;gap:18px;align-items:stretch;}
+  .sankey-legend{flex:0 0 176px;padding-top:10px;border-right:1px solid var(--line);}
+  .sankey-legend-title{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:10px;}
+  .sankey-layout .chart{flex:1;min-width:0;}
+  .sankey-legend .legend-row{padding:3px 10px 3px 0;align-items:flex-start;line-height:1.3;}
+
+  /* ---------- Modal ---------- */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(30,36,32,.5);display:none;align-items:center;justify-content:center;padding:20px;z-index:50;}
+  .modal-backdrop.open{display:flex;}
+  .modal{background:var(--paper);border-radius:8px;max-width:600px;width:100%;max-height:86vh;overflow-y:auto;padding:22px 24px;border:1px solid var(--line);}
+  .modal-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;}
+  .modal-title{font-family:var(--font-display);font-weight:700;font-size:17px;}
+  .modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink-soft);line-height:1;}
+  .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-bottom:16px;}
+  .modal-field-label{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);}
+  .modal-field-value{font-family:var(--font-mono);font-size:13px;margin-top:2px;}
+  .modal-summary{font-size:12.5px;color:var(--ink-soft);background:var(--paper-raised);border:1px solid var(--line);border-radius:4px;padding:10px 12px;margin-bottom:14px;}
+
+  footer.credit{margin-top:8px;font-size:11px;color:var(--ink-faint);}
+
+  @media (max-width:1100px){
+    .breakdown-layout{grid-template-columns:1fr;}
+    .key-metrics{grid-template-columns:repeat(2,1fr);}
+  }
+  @media (max-width:920px){
+    .sidebar{display:none;}
+    .kpi-grid{grid-template-columns:1fr;}
+    .panel-row{grid-template-columns:1fr;}
+    .sankey-layout{flex-direction:column;}
+    .sankey-legend{border-right:none;border-bottom:1px solid var(--line);padding-bottom:10px;flex:none;}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important;}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">Waste Audit BI</div>
+    <div class="brand-sub">Bin Audit Operations</div>
+    <ul class="side-nav">
+      <li class="active">Report</li>
+      <li>Audits</li>
+      <li>Materials</li>
+      <li>Locations</li>
+    </ul>
+    <div class="side-spacer"></div>
+    <div class="side-note">
+      Weights estimated from bin volume × fullness × material % × catalogue density (g/L).
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h1>Waste Audit Report</h1>
+      <div class="topbar-controls">
+        <span id="statusPill" class="status-pill loading"><span class="status-dot"></span><span id="statusText">Connecting…</span></span>
+        <span class="status-pill" id="syncedPill"><span id="syncedText">—</span></span>
+        <label class="chk"><input type="checkbox" id="autoRefreshChk" checked /> Auto-refresh (60s)</label>
+        <button class="btn ghost" id="refreshBtn">Refresh</button>
+        <button class="btn ghost" id="exportBtn">Export CSV</button>
+      </div>
+    </div>
+
+    <div class="slicers">
+      <div class="slicer">
+        <span class="slicer-label">From</span>
+        <input type="date" id="dateFrom" />
+      </div>
+      <div class="slicer">
+        <span class="slicer-label">To</span>
+        <input type="date" id="dateTo" />
+      </div>
+      <div class="slicer">
+        <span class="slicer-label">Site / area</span>
+        <select id="areaFilter"><option value="__all">All sites</option></select>
+      </div>
+      <div class="slicer">
+        <span class="slicer-label">Stream</span>
+        <select id="streamFilter">
+          <option value="__all">All streams</option>
+          <option>General Waste</option>
+          <option>Mixed Recycling</option>
+          <option>Paper &amp; Cardboard</option>
+          <option>CDS</option>
+        </select>
+      </div>
+      <div class="slicer">
+        <span class="slicer-label">Auditor</span>
+        <select id="auditorFilter"><option value="__all">All auditors</option></select>
+      </div>
+      <div class="slicer">
+        <span class="slicer-label">Unit</span>
+        <div class="unit-toggle">
+          <button id="unitKg" class="active">Weight (kg)</button>
+          <button id="unitL">Volume (L)</button>
+        </div>
+      </div>
+      <div class="slicer slicer-checks">
+        <label class="chk"><input type="checkbox" id="confirmedOnlyChk" /> Confirmed AI results only</label>
+        <label class="chk"><input type="checkbox" id="includeExcludedChk" /> Include drafts / test data</label>
+      </div>
+    </div>
+    <div class="coverage-note" id="coverageNote"></div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card c-green">
+        <div class="kpi-label">Total waste audited</div>
+        <div class="kpi-value" id="kpiTotalWaste">—</div>
+        <div class="kpi-sub" id="kpiTotalWasteSub">&nbsp;</div>
+      </div>
+      <div class="kpi-card c-teal">
+        <div class="kpi-label">Actual recycling rate</div>
+        <div class="kpi-value" id="kpiActualRate">—</div>
+        <div class="kpi-sub" id="kpiActualRateSub">&nbsp;</div>
+      </div>
+      <div class="kpi-card c-amber">
+        <div class="kpi-label">Potential recovery rate</div>
+        <div class="kpi-value" id="kpiPotentialRate">—</div>
+        <div class="kpi-sub">if correctly sorted</div>
+      </div>
+      <div class="kpi-card c-red">
+        <div class="kpi-label">Recycling contamination</div>
+        <div class="kpi-value" id="kpiContamRate">—</div>
+        <div class="kpi-sub" id="kpiContamRateSub">&nbsp;</div>
+      </div>
+      <div class="kpi-card c-blue">
+        <div class="kpi-label">Missed CDS containers</div>
+        <div class="kpi-value" id="kpiCds">—</div>
+        <div class="kpi-sub">refundable, found in other bins</div>
+      </div>
+      <div class="kpi-card c-violet">
+        <div class="kpi-label">Recyclables lost to general waste</div>
+        <div class="kpi-value" id="kpiRecoverable">—</div>
+        <div class="kpi-sub" id="kpiRecoverableSub">&nbsp;</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Contamination vs recyclability</div>
+        <div class="panel-note">Classified against each material's correct stream for the audit's setup · click a donut segment to focus the material list</div>
+      </div>
+      <div class="stream-tabs" id="streamTabs"></div>
+      <div class="breakdown-layout">
+        <div>
+          <div id="classDonut" style="height:250px;"></div>
+          <div class="class-legend" id="classLegend"></div>
+        </div>
+        <div>
+          <div id="materialBars" style="height:380px;"></div>
+        </div>
+      </div>
+      <div class="key-metrics" id="keyMetrics"></div>
+    </div>
+
+    <div class="panel-row">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Site leaderboard — contamination rate</div>
+          <div class="panel-note">Recycling streams only · click a bar to filter by site</div>
+        </div>
+        <div id="siteChart" class="chart chart-med"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Trend — contamination &amp; recovery</div>
+          <div class="panel-note">By week</div>
+        </div>
+        <div id="trendChart" class="chart chart-med"></div>
+      </div>
+    </div>
+
+    <div class="panel-row">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Audits per auditor</div>
+          <div class="panel-note">Coverage &amp; AI confirmation</div>
+        </div>
+        <div id="auditorChart" class="chart chart-sm"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Audit locations</div>
+          <div class="panel-note">Marker colour = contamination severity</div>
+        </div>
+        <div id="mapChart" class="chart chart-map"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Waste stream composition by area</div>
+          <div class="panel-note">Left nodes: <code>area</code> column (falls back to <code>location</code> when area is blank)</div>
+        </div>
+        <div class="panel-note">Click a node to filter the dashboard by area</div>
+      </div>
+      <div class="sankey-layout">
+        <div class="sankey-legend">
+          <div class="sankey-legend-title">Material categories</div>
+          <div id="sankeyLegendList"></div>
+        </div>
+        <div id="sankeyChart" class="chart chart-tall"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Audits</div>
+        <div class="panel-note">Click a row for full detail</div>
+      </div>
+      <div class="table-tools">
+        <input type="text" id="tableSearch" placeholder="Search site, location, auditor…" />
+        <span class="panel-note" id="tableCount"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>Site</th><th>Location</th><th>Stream</th><th>Bin</th>
+              <th>Fullness</th><th>Est. weight</th><th>Contamination</th><th>Status</th><th>Auditor</th>
+            </tr>
+          </thead>
+          <tbody id="auditTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <footer class="credit">Live data from Supabase · <span id="tableRange"></span></footer>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="modalTitle">Audit detail</div>
+        <div class="panel-note" id="modalSubtitle"></div>
+      </div>
+      <button class="modal-close" id="modalClose">&times;</button>
+    </div>
+    <div class="modal-grid" id="modalGrid"></div>
+    <div class="modal-summary" id="modalSummary" style="display:none;"></div>
+    <div id="modalMaterialsChart" style="height:230px;"></div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   CONFIG
+===================================================================== */
+const CONFIG = {
+  SUPABASE_URL: 'https://tsfxdrjtdhwvunwpoxbs.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_oCb8WJ2RHMa-WsHNRXn2rw_8qfoDQXm',
+  ROW_LIMIT: 1000,
+  AUTO_REFRESH_MS: 60000,
+};
+
+/* ASSUMPTIONS — confirm/adjust:
+   1. catalogue.density is bulk density in grams per litre (g/L).
+   2. bin_type "recycling" is treated as the Mixed Recycling stream.
+   3. audits.setup selects stream_setup1/2/3; missing setup falls back 2 -> 1.
+   4. fullness_percentage is capped at 100 for volume math. */
+const BIN_STREAM = {
+  general_waste: 'General Waste',
+  mixed_recycling: 'Mixed Recycling',
+  recycling: 'Mixed Recycling',
+  paper_cardboard: 'Paper & Cardboard',
+  cds: 'CDS',
+};
+
+const CLASS_META = {
+  correct:        { label:'Correct',                 color:'#3F6B34', order:5 },
+  landfill:       { label:'Landfill contamination',  color:'#C82C2C', order:1 },
+  cross_stream:   { label:'Cross-stream contamination', color:'#E0A400', order:2 },
+  cds_missed:     { label:'CDS / incorrect recycling', color:'#3B6E8F', order:3 },
+  recoverable_gw: { label:'Recyclables in general waste', color:'#2F8577', order:4 },
+  unclassified:   { label:'Unclassified',            color:'#9AA097', order:6 },
+};
+const CONTAM_CLASSES = ['landfill','cross_stream','cds_missed'];
+
+const COLOR = {
+  ink:'#1E2420', inkSoft:'rgba(30,36,32,.6)', line:'rgba(30,36,32,.13)',
+  paper:'#EAEDE7', paperRaised:'#F6F8F3',
+  red:'#C82C2C', amber:'#E0A400', green:'#3F6B34', violet:'#6E5296',
+  blue:'#3B6E8F', teal:'#2F8577', grey:'#9AA097',
+};
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* Category colors for sankey / modal pie */
+const CATEGORY_COLOR_MAP = {
+  'landfill / general waste': COLOR.red, 'landfill': COLOR.red, 'general waste': COLOR.red, 'general': COLOR.red,
+  'recycling': COLOR.amber, 'organics': COLOR.green, 'glass': COLOR.violet,
+  'paper & cardboard': '#3B6E8F', 'paper and cardboard': '#3B6E8F', 'paper': '#3B6E8F', 'cardboard': '#3B6E8F',
+  'plastics': '#2F8577', 'soft plastics': '#5FA89C', 'metals': '#5B7480',
+  'composites': '#8C6D4F', 'cds': '#C1662F', 'hazardous': '#A6325B',
+  'compostable packaging': '#7A9B4E', 'other': COLOR.grey,
+  'uncategorised': COLOR.grey, 'uncategorized': COLOR.grey,
+};
+const FALLBACK_PALETTE = ['#B08968','#4C7A96','#8E6C88','#6B8E4E','#A65D57','#5C8A8A','#9C7A3C','#71698C'];
+const fallbackAssignments = new Map();
+function categoryColor(cat){
+  const key = (cat || '').trim().toLowerCase();
+  if (CATEGORY_COLOR_MAP[key]) return CATEGORY_COLOR_MAP[key];
+  if (fallbackAssignments.has(key)) return fallbackAssignments.get(key);
+  const color = FALLBACK_PALETTE[fallbackAssignments.size % FALLBACK_PALETTE.length];
+  fallbackAssignments.set(key, color);
+  return color;
+}
+
+/* ---------- state ---------- */
+const state = {
+  supabase: null,
+  allAudits: [],          // raw audits with nested ai_results/materials
+  lines: [],              // enriched material lines (one per material per audit)
+  catalogue: new Map(),   // lowercased name -> catalogue row
+  filters: {
+    dateFrom:'', dateTo:'', area:'__all', stream:'__all', auditor:'__all',
+    unit:'kg', confirmedOnly:false, includeExcluded:false,
+  },
+  streamTab: '__all',
+  classFocus: null,       // donut segment focus for material list
+  charts: {},
+  leafletMap: null, leafletLayer: null,
+  autoRefreshTimer: null,
+};
+
+/* ---------- generic helpers ---------- */
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtPct(n, digits){
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return n.toFixed(digits === undefined ? 1 : digits) + '%';
+}
+function fmt(n, digits){
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return n.toLocaleString(undefined, { maximumFractionDigits: digits === undefined ? 1 : digits });
+}
+function getAiResult(audit){
+  const r = audit.ai_results;
+  if (!r) return null;
+  return Array.isArray(r) ? (r[0] || null) : r;
+}
+function setStatus(kind, text){
+  const pill = document.getElementById('statusPill');
+  pill.className = 'status-pill ' + kind;
+  document.getElementById('statusText').textContent = text;
+}
+function setSynced(){ document.getElementById('syncedText').textContent = 'Synced ' + new Date().toLocaleTimeString(); }
+function sectionError(containerId, tableName){
+  const el = document.getElementById(containerId);
+  if (el) el.innerHTML = '<div class="empty-note">No data returned for <code>' + tableName +
+    '</code>. Check RLS SELECT policies or current filters.</div>';
+}
+function contamColor(pct){
+  if (pct === null || pct === undefined || isNaN(pct)) return COLOR.grey;
+  if (pct < 10) return COLOR.green;
+  if (pct < 25) return COLOR.amber;
+  return COLOR.red;
+}
+function statusBadgeClass(status){
+  const s = (status || '').toLowerCase();
+  if (s.includes('submit') || s.includes('complete')) return 'g';
+  if (s.includes('draft') || s.includes('progress') || s.includes('review')) return 'a';
+  return 'n';
+}
+
+/* ---------- data hygiene ---------- */
+const TEST_PATTERN = /\btest\b|^x{3,}$|^zx{3,}$|ghfdg|kfhcjg|^hehe$|^fs$/i;
+function isTestRow(a){
+  return TEST_PATTERN.test(a.area || '') || TEST_PATTERN.test(a.location || '') || TEST_PATTERN.test(a.auditor_name || '');
+}
+// Archived audits are the completed/closed ones in this workflow — they carry
+// nearly all AI results, so they stay IN by default. Drafts and test rows are hidden.
+function isExcludedByDefault(a){
+  return (a.status || '').toLowerCase() === 'draft' || isTestRow(a);
+}
+// Conservative auditor-name normalisation: trims, collapses known typo variants.
+const AUDITOR_ALIASES = {
+  'marcela mayer':'Marcela Meyer', 'marcela':'Marcela Meyer', 'marcela meyer':'Marcela Meyer',
+  'binayak khadka':'Binayak Raj Khadka', 'binayak':'Binayak Raj Khadka', 'binayak raj khadka':'Binayak Raj Khadka',
+  'kritik bhattarai':'Kritik Bhattarai',
+};
+function normAuditor(name){
+  const t = (name || '').trim();
+  if (!t) return 'Unknown';
+  return AUDITOR_ALIASES[t.toLowerCase()] || t;
+}
+function normArea(a){
+  let s = (a.area || '').trim();
+  if (!s || s.toLowerCase() === 'null') s = (a.location || '').trim() || 'Unspecified';
+  // collapse known near-duplicates of the same site
+  const l = s.toLowerCase().replace(/\s+/g,' ');
+  if (l === '5 martin pl' || l === '5 martin' || l === '5 martin place') return '5 Martin Place';
+  return s;
+}
+function binLitres(sz){
+  const m = /(\d+)/.exec(sz || '');
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/* ---------- classification engine ---------- */
+function classify(dest, stream){
+  if (!dest || dest === 'None' || dest === 'null') return 'unclassified';
+  if (dest === stream) return 'correct';
+  if (dest === 'CDS') return 'cds_missed';
+  if (dest === 'General Waste') return stream === 'General Waste' ? 'correct' : 'landfill';
+  if (stream === 'General Waste') return 'recoverable_gw';
+  return 'cross_stream';
+}
+
+function buildLines(){
+  const lines = [];
+  state.allAudits.forEach(a => {
+    const stream = BIN_STREAM[a.bin_type] || null;
+    const air = getAiResult(a);
+    if (!stream || !air || !Array.isArray(air.materials)) return;
+    const setup = ['1','2','3'].includes(String(a.setup)) ? String(a.setup) : '2';
+    const litres = binLitres(a.bin_size);
+    let fullness = typeof a.fullness_percentage === 'number' ? a.fullness_percentage : null;
+    if (fullness !== null) fullness = Math.min(fullness, 100);
+    const volL = (litres && fullness !== null) ? litres * fullness / 100 : null;
+
+    air.materials.forEach(m => {
+      if (typeof m.percentage !== 'number') return;
+      const c = state.catalogue.get((m.material_name || '').trim().toLowerCase()) || null;
+      let dest = null;
+      if (c) {
+        dest = c['stream_setup' + setup];
+        if (!dest || dest === 'null' || dest === 'None') dest = c.stream_setup2;
+        if (!dest || dest === 'null' || dest === 'None') dest = c.stream_setup1;
+        if (dest === 'null') dest = null;
+      }
+      const density = c && c.density != null ? Number(c.density) : null; // g/L
+      const matL = volL !== null ? volL * m.percentage / 100 : null;
+      const kg = (matL !== null && density) ? matL * density / 1000 : null;
+      lines.push({
+        audit: a,
+        stream,
+        material: m.material_name,
+        category: c ? c.category : 'Uncategorised',
+        pct: m.percentage,
+        litres: matL,
+        kg,
+        klass: classify(dest, stream),
+        confirmed: !!air.confirmed_at,
+        date: a.audit_date || (a.created_at ? a.created_at.slice(0,10) : null),
+        area: normArea(a),
+        auditor: normAuditor(a.auditor_name),
+      });
+    });
+  });
+  state.lines = lines;
+}
+
+/* ---------- filtering ---------- */
+function auditPassesFilters(a){
+  const f = state.filters;
+  if (!f.includeExcluded && isExcludedByDefault(a)) return false;
+  const d = a.audit_date || (a.created_at ? a.created_at.slice(0,10) : null);
+  if (f.dateFrom && d && d < f.dateFrom) return false;
+  if (f.dateTo && d && d > f.dateTo) return false;
+  if (f.area !== '__all' && normArea(a) !== f.area) return false;
+  if (f.stream !== '__all' && (BIN_STREAM[a.bin_type] || '—') !== f.stream) return false;
+  if (f.auditor !== '__all' && normAuditor(a.auditor_name) !== f.auditor) return false;
+  return true;
+}
+function getFilteredLines(){
+  const f = state.filters;
+  return state.lines.filter(ln =>
+    auditPassesFilters(ln.audit) && (!f.confirmedOnly || ln.confirmed)
+  );
+}
+function getFilteredAudits(){
+  return state.allAudits.filter(auditPassesFilters);
+}
+function lineValue(ln){
+  return state.filters.unit === 'kg' ? (ln.kg ?? 0) : (ln.litres ?? 0);
+}
+function unitLabel(){ return state.filters.unit === 'kg' ? 'kg' : 'L'; }
+
+/* ---------- fetch ---------- */
+async function fetchAll(){
+  setStatus('loading', 'Syncing…');
+  try {
+    const { data: audits, error: auditErr } = await state.supabase
+      .from('audits')
+      .select(`
+        id, location, area, bin_type, bin_size, fullness_percentage,
+        audit_date, auditor_name, status, setup, archived_at,
+        latitude, longitude, created_at, number_of_auditors,
+        ai_results (
+          contamination_percentage, ai_confidence, summary, observations, confirmed_at,
+          materials ( material_name, percentage )
+        )
+      `)
+      .order('audit_date', { ascending: false })
+      .limit(CONFIG.ROW_LIMIT);
+    if (auditErr) throw auditErr;
+
+    const { data: catalogue, error: catErr } = await state.supabase
+      .from('material_catalogue')
+      .select('name, category, density, stream_setup1, stream_setup2, stream_setup3');
+    if (catErr) throw catErr;
+
+    state.catalogue = new Map();
+    (catalogue || []).forEach(row => {
+      if (row.name) state.catalogue.set(row.name.trim().toLowerCase(), row);
+    });
+    state.allAudits = audits || [];
+    buildLines();
+    setStatus('ok', 'Connected');
+    setSynced();
+    populateFilterOptions();
+    renderAll();
+  } catch (err) {
+    console.error(err);
+    setStatus('err', 'Connection error');
+    document.getElementById('coverageNote').textContent =
+      (err && err.message) ? err.message : 'Could not reach Supabase. Check URL/key and RLS policies.';
+  }
+}
+
+function populateFilterOptions(){
+  const areaSel = document.getElementById('areaFilter');
+  const audSel = document.getElementById('auditorFilter');
+  const areas = [...new Set(state.allAudits.filter(a => state.filters.includeExcluded || !isExcludedByDefault(a)).map(normArea))].sort();
+  const auditors = [...new Set(state.allAudits.filter(a => state.filters.includeExcluded || !isExcludedByDefault(a)).map(a => normAuditor(a.auditor_name)))].sort();
+  const prevArea = state.filters.area, prevAud = state.filters.auditor;
+  areaSel.innerHTML = '<option value="__all">All sites</option>' + areas.map(a => `<option>${escapeHtml(a)}</option>`).join('');
+  audSel.innerHTML = '<option value="__all">All auditors</option>' + auditors.map(a => `<option>${escapeHtml(a)}</option>`).join('');
+  areaSel.value = areas.includes(prevArea) ? prevArea : '__all';
+  audSel.value = auditors.includes(prevAud) ? prevAud : '__all';
+  state.filters.area = areaSel.value;
+  state.filters.auditor = audSel.value;
+}
+
+/* ---------- render orchestration ---------- */
+function renderAll(){
+  const lines = getFilteredLines();
+  const audits = getFilteredAudits();
+  renderCoverage(audits, lines);
+  renderKPIs(lines, audits);
+  renderStreamTabs(lines);
+  renderBreakdown(lines);
+  renderSiteChart(lines);
+  renderTrend(lines);
+  renderAuditorChart(audits);
+  renderMap(audits);
+  renderSankey(lines);
+  renderTable(audits);
+}
+
+function renderCoverage(audits, lines){
+  const excluded = state.allAudits.filter(a => isExcludedByDefault(a)).length;
+  const weighable = new Set(lines.filter(l => l.kg !== null).map(l => l.audit.id)).size;
+  const withAi = new Set(lines.map(l => l.audit.id)).size;
+  let note = `${audits.length} audits in view · ${withAi} with AI material data · ${weighable} weighable`;
+  if (!state.filters.includeExcluded && excluded) note += ` · ${excluded} drafts/test audits hidden`;
+  document.getElementById('coverageNote').textContent = note;
+}
+
+/* ---------- KPIs ---------- */
+function sumBy(lines, pred){
+  let s = 0; lines.forEach(l => { if (pred(l)) s += lineValue(l); }); return s;
+}
+function renderKPIs(lines, audits){
+  const u = unitLabel();
+  const total = sumBy(lines, () => true);
+  const totalKg = lines.reduce((s,l) => s + (l.kg ?? 0), 0);
+  const totalL = lines.reduce((s,l) => s + (l.litres ?? 0), 0);
+
+  // recyclable = anything whose correct destination is NOT General Waste
+  const recoverableTotal = sumBy(lines, l => l.klass !== 'unclassified' &&
+    !(l.klass === 'correct' && l.stream === 'General Waste') && (
+      (l.klass === 'correct' && l.stream !== 'General Waste') ||
+      l.klass === 'cds_missed' || l.klass === 'recoverable_gw' || l.klass === 'cross_stream'
+    ));
+  const correctlyRecycled = sumBy(lines, l => l.klass === 'correct' && l.stream !== 'General Waste');
+
+  const recyclingStreamTotal = sumBy(lines, l => l.stream !== 'General Waste');
+  const recyclingContam = sumBy(lines, l => l.stream !== 'General Waste' && CONTAM_CLASSES.includes(l.klass));
+
+  const cdsMissed = sumBy(lines, l => l.klass === 'cds_missed');
+  const recoverableGw = sumBy(lines, l => l.klass === 'recoverable_gw');
+
+  document.getElementById('kpiTotalWaste').textContent = fmt(state.filters.unit === 'kg' ? totalKg : totalL) + ' ' + u;
+  document.getElementById('kpiTotalWasteSub').textContent =
+    `${fmt(totalL,0)} L · ${fmt(totalKg)} kg · ${audits.length} audits`;
+
+  document.getElementById('kpiActualRate').textContent = total ? fmtPct(100*correctlyRecycled/total,0) : '—';
+  document.getElementById('kpiActualRateSub').textContent = total ? `${fmt(recoverableTotal)} ${u} recoverable in view` : ' ';
+
+  document.getElementById('kpiPotentialRate').textContent = total ? fmtPct(100*recoverableTotal/total,0) : '—';
+
+  document.getElementById('kpiContamRate').textContent = recyclingStreamTotal ? fmtPct(100*recyclingContam/recyclingStreamTotal,0) : '—';
+  document.getElementById('kpiContamRateSub').textContent = recyclingStreamTotal ?
+    `${fmt(recyclingContam)} ${u} of ${fmt(recyclingStreamTotal)} ${u} in recycling streams` : 'no recycling-stream audits in view';
+
+  document.getElementById('kpiCds').textContent = fmt(cdsMissed) + ' ' + u;
+  document.getElementById('kpiRecoverable').textContent = fmt(recoverableGw) + ' ' + u;
+  document.getElementById('kpiRecoverableSub').textContent = 'recoverable if diverted';
+}
+
+/* ---------- stream tabs + donut + material bars + key metrics ---------- */
+function renderStreamTabs(lines){
+  const tabsEl = document.getElementById('streamTabs');
+  const present = [...new Set(lines.map(l => l.stream))];
+  const order = ['General Waste','Mixed Recycling','Paper & Cardboard','CDS'];
+  const tabs = ['__all', ...order.filter(s => present.includes(s))];
+  if (!tabs.includes(state.streamTab)) state.streamTab = '__all';
+  tabsEl.innerHTML = tabs.map(t =>
+    `<button class="stream-tab ${state.streamTab===t?'active':''}" data-tab="${escapeHtml(t)}">${t==='__all'?'All':escapeHtml(t)}</button>`
+  ).join('');
+  [...tabsEl.querySelectorAll('.stream-tab')].forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.streamTab = btn.dataset.tab;
+      state.classFocus = null;
+      renderBreakdown(getFilteredLines());
+      renderStreamTabs(getFilteredLines());
+    });
+  });
+}
+
+function tabLines(lines){
+  return state.streamTab === '__all' ? lines : lines.filter(l => l.stream === state.streamTab);
+}
+
+function renderBreakdown(lines){
+  const tl = tabLines(lines);
+  const u = unitLabel();
+
+  /* donut */
+  const donutEl = document.getElementById('classDonut');
+  if (!state.charts.donut) state.charts.donut = echarts.init(donutEl);
+  const byClass = {};
+  tl.forEach(l => { byClass[l.klass] = (byClass[l.klass] || 0) + lineValue(l); });
+  const total = Object.values(byClass).reduce((a,b)=>a+b, 0);
+  const donutData = Object.entries(byClass)
+    .sort((a,b) => CLASS_META[a[0]].order - CLASS_META[b[0]].order)
+    .map(([k,v]) => ({ name: CLASS_META[k].label, value: Math.round(v*100)/100, klass: k,
+                       itemStyle: { color: CLASS_META[k].color } }));
+
+  if (!tl.length) {
+    state.charts.donut.clear();
+    document.getElementById('classLegend').innerHTML = '';
+    document.getElementById('keyMetrics').innerHTML = '';
+    sectionError('materialBars','materials');
+    return;
+  }
+
+  state.charts.donut.setOption({
+    animation: !prefersReducedMotion,
+    tooltip: { trigger:'item', formatter: p => `${p.name}: ${fmt(p.value)} ${u} (${p.percent}%)` },
+    series: [{
+      type:'pie', radius:['55%','80%'],
+      data: donutData,
+      label: { show:false },
+      emphasis: { scaleSize: 4 },
+    }],
+    graphic: [{
+      type:'text', left:'center', top:'middle',
+      style:{ text: `${fmt(total)} ${u}\n${state.streamTab==='__all'?'All streams':state.streamTab}`,
+              textAlign:'center', fill:COLOR.ink, font:'600 14px IBM Plex Mono' },
+    }],
+  }, true);
+  state.charts.donut.off('click');
+  state.charts.donut.on('click', p => {
+    const k = p.data && p.data.klass;
+    state.classFocus = (state.classFocus === k) ? null : k;
+    renderBreakdown(getFilteredLines());
+  });
+
+  /* legend with shares */
+  document.getElementById('classLegend').innerHTML = donutData.map(d => {
+    const share = total ? (100*d.value/total) : 0;
+    const focus = state.classFocus && state.classFocus === d.klass;
+    return `<div class="legend-row" style="${focus?'font-weight:700;':''}">
+      <span class="swatch" style="background:${d.itemStyle.color}"></span>${escapeHtml(d.name)}
+      <b>${fmtPct(share, 1)}</b></div>`;
+  }).join('') + (state.classFocus ? `<div class="panel-note" style="margin-top:6px;">Filtering material list: ${escapeHtml(CLASS_META[state.classFocus].label)} — click segment again to clear</div>` : '');
+
+  /* material bars */
+  const barsEl = document.getElementById('materialBars');
+  if (!state.charts.bars) state.charts.bars = echarts.init(barsEl);
+  const byMat = new Map();
+  tl.forEach(l => {
+    if (state.classFocus && l.klass !== state.classFocus) return;
+    if (!byMat.has(l.material)) byMat.set(l.material, { val:0, byClass:{} });
+    const rec = byMat.get(l.material);
+    rec.val += lineValue(l);
+    rec.byClass[l.klass] = (rec.byClass[l.klass] || 0) + lineValue(l);
+  });
+  const rows = [...byMat.entries()]
+    .map(([name, rec]) => {
+      const domKlass = Object.entries(rec.byClass).sort((a,b)=>b[1]-a[1])[0][0];
+      return { name, val: rec.val, klass: domKlass };
+    })
+    .sort((a,b)=>b.val-a.val).slice(0, 12).reverse();
+
+  state.charts.bars.setOption({
+    animation: !prefersReducedMotion,
+    tooltip: { trigger:'axis', axisPointer:{ type:'shadow' },
+      formatter: ps => ps.map(p => {
+        const share = total ? fmtPct(100*p.value/total,1) : '—';
+        return `${p.name}<br/>${fmt(p.value)} ${u} · ${share} of ${state.streamTab==='__all'?'total':state.streamTab}<br/><i>${CLASS_META[rows[p.dataIndex].klass].label}</i>`;
+      }).join('') },
+    grid:{ left:170, right:70, top:6, bottom:6 },
+    xAxis:{ type:'value', axisLabel:{ formatter: v => fmt(v,0) + ' ' + u }, splitLine:{ lineStyle:{ color: COLOR.line } } },
+    yAxis:{ type:'category', data: rows.map(r=>r.name), axisLabel:{ fontSize:11, fontFamily:'Inter', width:160, overflow:'truncate' } },
+    series:[{
+      type:'bar',
+      data: rows.map(r => ({ value: Math.round(r.val*100)/100, itemStyle:{ color: CLASS_META[r.klass].color } })),
+      barMaxWidth:16,
+      label:{ show:true, position:'right', fontSize:10.5, fontFamily:'IBM Plex Mono',
+        formatter: p => total ? fmtPct(100*p.value/total,1) : '' },
+    }],
+  }, true);
+
+  /* key metrics strip: destination shares within tab */
+  const kmEl = document.getElementById('keyMetrics');
+  const km = [];
+  const share = (pred, label, colorVar) => {
+    const v = sumBy(tl, pred);
+    km.push({ label, val: total?100*v/total:0, sub: `${fmt(v)} ${u}`, color: colorVar });
+  };
+  share(l => l.klass === 'cds_missed', 'CDS', CLASS_META.cds_missed.color);
+  share(l => l.category === 'Organics' && l.klass !== 'correct', 'Organics (misplaced)', COLOR.green);
+  share(l => l.klass === 'landfill', 'Landfill contam.', CLASS_META.landfill.color);
+  share(l => l.klass === 'cross_stream', 'Cross-stream', CLASS_META.cross_stream.color);
+  share(l => l.klass === 'correct', 'Correct', CLASS_META.correct.color);
+  kmEl.innerHTML = km.map(m =>
+    `<div class="key-metric"><div class="km-label">${escapeHtml(m.label)}</div>
+     <div class="km-value" style="color:${m.color}">${fmtPct(m.val,0)}</div>
+     <div class="km-sub">${m.sub}</div></div>`).join('');
+}
+
+/* ---------- site leaderboard ---------- */
+function renderSiteChart(lines){
+  const el = document.getElementById('siteChart');
+  if (!state.charts.site) state.charts.site = echarts.init(el);
+  const chart = state.charts.site;
+  const u = unitLabel();
+
+  const bySite = new Map();
+  lines.forEach(l => {
+    if (l.stream === 'General Waste') return; // contamination is a recycling-stream concept
+    if (!bySite.has(l.area)) bySite.set(l.area, { total:0, contam:0 });
+    const rec = bySite.get(l.area);
+    rec.total += lineValue(l);
+    if (CONTAM_CLASSES.includes(l.klass)) rec.contam += lineValue(l);
+  });
+  const rows = [...bySite.entries()]
+    .filter(([,r]) => r.total > 0)
+    .map(([site,r]) => ({ site, rate: 100*r.contam/r.total, contam:r.contam, total:r.total }))
+    .sort((a,b)=>a.rate-b.rate);
+
+  if (!rows.length) { chart.clear(); sectionError('siteChart','audits'); return; }
+
+  chart.setOption({
+    animation: !prefersReducedMotion,
+    tooltip:{ trigger:'axis', axisPointer:{ type:'shadow' },
+      formatter: ps => ps.map(p => `${p.name}<br/>${fmtPct(p.value,1)} contaminated · ${fmt(rows[p.dataIndex].contam)} of ${fmt(rows[p.dataIndex].total)} ${u}`).join('') },
+    grid:{ left:150, right:60, top:6, bottom:24 },
+    xAxis:{ type:'value', max:100, axisLabel:{ formatter:'{value}%' }, splitLine:{ lineStyle:{ color: COLOR.line } } },
+    yAxis:{ type:'category', data: rows.map(r=>r.site), axisLabel:{ fontSize:11, fontFamily:'Inter', width:140, overflow:'truncate' } },
+    series:[{
+      type:'bar',
+      data: rows.map(r => ({ value: Math.round(r.rate*10)/10, itemStyle:{ color: contamColor(r.rate) } })),
+      barMaxWidth:16,
+      label:{ show:true, position:'right', fontSize:10.5, fontFamily:'IBM Plex Mono', formatter:'{c}%' },
+    }],
+  }, true);
+  chart.off('click');
+  chart.on('click', p => {
+    const site = rows[p.dataIndex] && rows[p.dataIndex].site;
+    if (!site) return;
+    const sel = document.getElementById('areaFilter');
+    state.filters.area = (state.filters.area === site) ? '__all' : site;
+    sel.value = state.filters.area;
+    renderAll();
+  });
+}
+
+/* ---------- trend ---------- */
+function isoWeek(dateStr){
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const day = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - day + 3);
+  const firstThu = new Date(Date.UTC(d.getUTCFullYear(),0,4));
+  const week = 1 + Math.round(((d - firstThu)/86400000 - 3 + ((firstThu.getUTCDay()+6)%7)) / 7);
+  return d.getUTCFullYear() + '-W' + String(week).padStart(2,'0');
+}
+function renderTrend(lines){
+  const el = document.getElementById('trendChart');
+  if (!state.charts.trend) state.charts.trend = echarts.init(el);
+  const chart = state.charts.trend;
+
+  const byWeek = new Map();
+  lines.forEach(l => {
+    if (!l.date) return;
+    const w = isoWeek(l.date);
+    if (!byWeek.has(w)) byWeek.set(w, { total:0, recTotal:0, contam:0, recovered:0 });
+    const rec = byWeek.get(w);
+    const v = lineValue(l);
+    rec.total += v;
+    if (l.stream !== 'General Waste') {
+      rec.recTotal += v;
+      if (CONTAM_CLASSES.includes(l.klass)) rec.contam += v;
+    }
+    if (l.klass === 'correct' && l.stream !== 'General Waste') rec.recovered += v;
+  });
+  const rows = [...byWeek.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+  if (!rows.length) { chart.clear(); sectionError('trendChart','audits'); return; }
+
+  chart.setOption({
+    animation: !prefersReducedMotion,
+    tooltip:{ trigger:'axis' },
+    legend:{ bottom:0, textStyle:{ fontFamily:'Inter', fontSize:11 } },
+    grid:{ left:44, right:20, top:16, bottom:44 },
+    xAxis:{ type:'category', data: rows.map(r=>r[0]), axisLine:{ lineStyle:{ color: COLOR.line } } },
+    yAxis:{ type:'value', max:100, axisLabel:{ formatter:'{value}%' }, splitLine:{ lineStyle:{ color: COLOR.line } } },
+    series:[
+      { name:'Contamination rate', type:'line', smooth:true, itemStyle:{ color: COLOR.red },
+        data: rows.map(r => r[1].recTotal ? Math.round(1000*r[1].contam/r[1].recTotal)/10 : null) },
+      { name:'Recovery rate', type:'line', smooth:true, itemStyle:{ color: COLOR.teal },
+        data: rows.map(r => r[1].total ? Math.round(1000*r[1].recovered/r[1].total)/10 : null) },
+    ],
+  }, true);
+}
+
+/* ---------- auditor coverage ---------- */
+function renderAuditorChart(audits){
+  const el = document.getElementById('auditorChart');
+  if (!state.charts.auditor) state.charts.auditor = echarts.init(el);
+  const chart = state.charts.auditor;
+
+  const by = new Map();
+  audits.forEach(a => {
+    const name = normAuditor(a.auditor_name);
+    if (!by.has(name)) by.set(name, { count:0, confirmed:0, withAi:0 });
+    const rec = by.get(name);
+    rec.count++;
+    const air = getAiResult(a);
+    if (air) { rec.withAi++; if (air.confirmed_at) rec.confirmed++; }
+  });
+  const rows = [...by.entries()].map(([name,r]) => ({ name, ...r }))
+    .sort((a,b)=>a.count-b.count).slice(-10);
+  if (!rows.length) { chart.clear(); sectionError('auditorChart','audits'); return; }
+
+  chart.setOption({
+    animation: !prefersReducedMotion,
+    tooltip:{ trigger:'axis', axisPointer:{ type:'shadow' },
+      formatter: ps => ps.map(p => {
+        const r = rows[p.dataIndex];
+        return `${r.name}<br/>${r.count} audits · ${r.confirmed}/${r.withAi} AI results confirmed`;
+      }).join('') },
+    grid:{ left:140, right:40, top:6, bottom:6 },
+    xAxis:{ type:'value', splitLine:{ lineStyle:{ color: COLOR.line } } },
+    yAxis:{ type:'category', data: rows.map(r=>r.name), axisLabel:{ fontSize:11, fontFamily:'Inter', width:130, overflow:'truncate' } },
+    series:[{
+      type:'bar', data: rows.map(r=>r.count), barMaxWidth:14,
+      itemStyle:{ color: COLOR.violet },
+      label:{ show:true, position:'right', fontSize:10.5, fontFamily:'IBM Plex Mono' },
+    }],
+  }, true);
+}
+
+/* ---------- map ---------- */
+function renderMap(audits){
+  const el = document.getElementById('mapChart');
+  const pts = audits.filter(a => typeof a.latitude === 'number' && typeof a.longitude === 'number');
+
+  if (!state.leafletMap) {
+    state.leafletMap = L.map(el, { scrollWheelZoom:false }).setView([-33.87, 151.2], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution:'&copy; OpenStreetMap contributors', maxZoom:18,
+    }).addTo(state.leafletMap);
+    state.leafletLayer = L.layerGroup().addTo(state.leafletMap);
+  }
+  state.leafletLayer.clearLayers();
+  if (!pts.length) return;
+
+  const bounds = [];
+  pts.forEach(a => {
+    const air = getAiResult(a);
+    const pct = air ? air.contamination_percentage : null;
+    const color = contamColor(pct);
+    L.circleMarker([a.latitude, a.longitude], { radius:7, color, weight:1, fillColor:color, fillOpacity:0.75 })
+      .bindPopup(`<strong>${escapeHtml(normArea(a))}</strong><br/>${escapeHtml(a.location || '')}<br/>` +
+        `Stream: ${escapeHtml(BIN_STREAM[a.bin_type] || a.bin_type || '—')}<br/>` +
+        `Contamination: ${fmtPct(pct)} · ${escapeHtml(a.audit_date || '')}`)
+      .addTo(state.leafletLayer);
+    bounds.push([a.latitude, a.longitude]);
+  });
+  state.leafletMap.fitBounds(bounds, { padding:[24,24], maxZoom:13 });
+  setTimeout(() => state.leafletMap.invalidateSize(), 50);
+}
+
+/* ---------- sankey ---------- */
+function renderSankey(lines){
+  const el = document.getElementById('sankeyChart');
+  if (!state.charts.sankey) state.charts.sankey = echarts.init(el);
+  const chart = state.charts.sankey;
+  const legendEl = document.getElementById('sankeyLegendList');
+  const u = unitLabel();
+
+  const linkMap = new Map();
+  const areas = new Set(), cats = new Set();
+  lines.forEach(l => {
+    const v = lineValue(l);
+    if (!v) return;
+    const key = l.area + '||' + l.category;
+    linkMap.set(key, (linkMap.get(key) || 0) + v);
+    areas.add(l.area); cats.add(l.category);
+  });
+
+  if (!linkMap.size) { chart.clear(); legendEl.innerHTML=''; sectionError('sankeyChart','materials'); return; }
+
+  legendEl.innerHTML = [...cats].sort().map(c =>
+    `<div class="legend-row"><span class="swatch" style="background:${categoryColor(c)}"></span>${escapeHtml(c)}</div>`).join('');
+
+  chart.setOption({
+    animation: !prefersReducedMotion,
+    tooltip:{ trigger:'item', triggerOn:'mousemove',
+      formatter: p => p.dataType==='edge' ? `${p.data.source} → ${p.data.target}: ${fmt(p.data.value)} ${u}` : p.name },
+    series:[{
+      type:'sankey',
+      data: [
+        ...[...areas].map(a => ({ name:a, itemStyle:{ color: COLOR.ink } })),
+        ...[...cats].map(c => ({ name:c, itemStyle:{ color: categoryColor(c) } })),
+      ],
+      links: [...linkMap.entries()].map(([k,v]) => {
+        const [source,target] = k.split('||');
+        return { source, target, value: Math.round(v*100)/100 };
+      }),
+      emphasis:{ focus:'adjacency' },
+      lineStyle:{ color:'gradient', opacity:0.35, curveness:0.5 },
+      label:{ color: COLOR.ink, fontFamily:'Inter', fontSize:11 },
+      nodeWidth:14, nodeGap:10,
+    }],
+  }, true);
+  chart.off('click');
+  chart.on('click', p => {
+    if (p.dataType === 'node' && areas.has(p.name)) {
+      state.filters.area = (state.filters.area === p.name) ? '__all' : p.name;
+      document.getElementById('areaFilter').value = state.filters.area;
+      renderAll();
+    }
+  });
+}
+
+/* ---------- table + modal ---------- */
+function auditKg(a){
+  let s = 0, any = false;
+  state.lines.forEach(l => { if (l.audit === a && l.kg !== null){ s += l.kg; any = true; } });
+  return any ? s : null;
+}
+function renderTable(audits){
+  const body = document.getElementById('auditTableBody');
+  const q = (document.getElementById('tableSearch').value || '').toLowerCase();
+  const rows = audits.filter(a => {
+    if (!q) return true;
+    return [normArea(a), a.location, normAuditor(a.auditor_name), a.bin_type].filter(Boolean).join(' ').toLowerCase().includes(q);
+  }).slice(0, 200);
+  document.getElementById('tableCount').textContent = `${rows.length} shown`;
+  document.getElementById('tableRange').textContent =
+    state.allAudits.length ? `${state.allAudits.length} audits loaded (limit ${CONFIG.ROW_LIMIT})` : '';
+
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="10" class="empty-note">No audits match the current filters.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(a => {
+    const air = getAiResult(a);
+    const contam = air ? air.contamination_percentage : null;
+    const kg = auditKg(a);
+    return `<tr data-id="${escapeHtml(a.id)}">
+      <td>${escapeHtml(a.audit_date || '—')}</td>
+      <td class="wrap">${escapeHtml(normArea(a))}</td>
+      <td class="wrap">${escapeHtml(a.location || '—')}</td>
+      <td class="wrap">${escapeHtml(BIN_STREAM[a.bin_type] || a.bin_type || '—')}</td>
+      <td>${escapeHtml(a.bin_size || '—')}</td>
+      <td>${fmtPct(typeof a.fullness_percentage==='number' ? Math.min(a.fullness_percentage,100) : null, 0)}</td>
+      <td>${kg !== null ? fmt(kg)+' kg' : '—'}</td>
+      <td style="color:${contamColor(contam)}">${fmtPct(contam)}</td>
+      <td><span class="badge ${statusBadgeClass(a.status)}">${escapeHtml(a.status || '—')}</span></td>
+      <td class="wrap">${escapeHtml(normAuditor(a.auditor_name))}</td>
+    </tr>`;
+  }).join('');
+  [...body.querySelectorAll('tr[data-id]')].forEach(tr => {
+    tr.addEventListener('click', () => {
+      const a = state.allAudits.find(x => x.id === tr.dataset.id);
+      openModal(a);
+    });
+  });
+}
+
+function openModal(audit){
+  if (!audit) return;
+  const air = getAiResult(audit);
+  document.getElementById('modalTitle').textContent = normArea(audit);
+  document.getElementById('modalSubtitle').textContent = audit.location || '';
+  const kg = auditKg(audit);
+  const fields = [
+    ['Audit date', audit.audit_date || '—'],
+    ['Status', audit.status || '—'],
+    ['Stream', BIN_STREAM[audit.bin_type] || audit.bin_type || '—'],
+    ['Bin size / fullness', `${audit.bin_size || '—'} / ${fmtPct(typeof audit.fullness_percentage==='number'?Math.min(audit.fullness_percentage,100):null,0)}`],
+    ['Est. weight', kg !== null ? fmt(kg)+' kg' : '—'],
+    ['Contamination (AI)', air ? fmtPct(air.contamination_percentage) : '—'],
+    ['AI confidence', air && typeof air.ai_confidence === 'number' ? fmtPct(air.ai_confidence) : '—'],
+    ['Confirmed', air && air.confirmed_at ? 'Yes' : 'No'],
+    ['Auditor', normAuditor(audit.auditor_name)],
+  ];
+  document.getElementById('modalGrid').innerHTML = fields.map(([l,v]) =>
+    `<div><div class="modal-field-label">${escapeHtml(l)}</div><div class="modal-field-value">${escapeHtml(String(v))}</div></div>`).join('');
+
+  const summaryEl = document.getElementById('modalSummary');
+  if (air && (air.summary || air.observations)) {
+    summaryEl.style.display = 'block';
+    summaryEl.textContent = air.summary || (Array.isArray(air.observations) ? air.observations.join(' · ') : air.observations);
+  } else summaryEl.style.display = 'none';
+
+  const audLines = state.lines.filter(l => l.audit === audit);
+  const mEl = document.getElementById('modalMaterialsChart');
+  if (audLines.length) {
+    mEl.style.display = 'block';
+    if (!state.charts.modal) state.charts.modal = echarts.init(mEl);
+    state.charts.modal.setOption({
+      animation:!prefersReducedMotion,
+      tooltip:{ trigger:'item', formatter: p => `${p.name}: ${p.value}%<br/><i>${CLASS_META[audLines[p.dataIndex].klass].label}</i>` },
+      series:[{
+        type:'pie', radius:['35%','70%'],
+        data: audLines.map(l => ({ name:l.material, value:l.pct, itemStyle:{ color: CLASS_META[l.klass].color } })),
+        label:{ fontSize:11, fontFamily:'Inter' },
+      }],
+    }, true);
+    setTimeout(() => state.charts.modal.resize(), 50);
+  } else mEl.style.display = 'none';
+
+  document.getElementById('modalBackdrop').classList.add('open');
+}
+function closeModal(){ document.getElementById('modalBackdrop').classList.remove('open'); }
+
+/* ---------- export ---------- */
+function exportCsv(){
+  const lines = getFilteredLines();
+  const header = ['audit_date','site','location','stream','bin_size','material','category','percentage','est_kg','est_litres','classification','confirmed','auditor'];
+  const rows = lines.map(l => [
+    l.date, l.area, l.audit.location || '', l.stream, l.audit.bin_size || '',
+    l.material, l.category, l.pct,
+    l.kg !== null ? Math.round(l.kg*1000)/1000 : '', l.litres !== null ? Math.round(l.litres*100)/100 : '',
+    CLASS_META[l.klass].label, l.confirmed ? 'yes' : 'no', l.auditor,
+  ]);
+  const csv = [header, ...rows].map(r => r.map(v => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'waste_audit_export.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ---------- resize / wiring ---------- */
+function resizeAllCharts(){
+  Object.values(state.charts).forEach(c => c && c.resize());
+  if (state.leafletMap) state.leafletMap.invalidateSize();
+}
+window.addEventListener('resize', () => { clearTimeout(window.__rz); window.__rz = setTimeout(resizeAllCharts, 120); });
+
+function setupAutoRefresh(){
+  if (state.autoRefreshTimer) clearInterval(state.autoRefreshTimer);
+  if (document.getElementById('autoRefreshChk').checked) {
+    state.autoRefreshTimer = setInterval(fetchAll, CONFIG.AUTO_REFRESH_MS);
+  }
+}
+
+function init(){
+  if (!window.supabase || !window.supabase.createClient) {
+    setStatus('err', 'Supabase library failed to load');
+    return;
+  }
+  state.supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
+    auth: { persistSession:false, autoRefreshToken:false, detectSessionInUrl:false },
+  });
+
+  const f = state.filters;
+  const on = (id, ev, fn) => document.getElementById(id).addEventListener(ev, fn);
+  on('refreshBtn','click', fetchAll);
+  on('exportBtn','click', exportCsv);
+  on('autoRefreshChk','change', setupAutoRefresh);
+  on('dateFrom','change', e => { f.dateFrom = e.target.value; renderAll(); });
+  on('dateTo','change', e => { f.dateTo = e.target.value; renderAll(); });
+  on('areaFilter','change', e => { f.area = e.target.value; renderAll(); });
+  on('streamFilter','change', e => { f.stream = e.target.value; renderAll(); });
+  on('auditorFilter','change', e => { f.auditor = e.target.value; renderAll(); });
+  on('confirmedOnlyChk','change', e => { f.confirmedOnly = e.target.checked; renderAll(); });
+  on('includeExcludedChk','change', e => { f.includeExcluded = e.target.checked; populateFilterOptions(); renderAll(); });
+  on('unitKg','click', () => { f.unit='kg'; document.getElementById('unitKg').classList.add('active'); document.getElementById('unitL').classList.remove('active'); renderAll(); });
+  on('unitL','click', () => { f.unit='L'; document.getElementById('unitL').classList.add('active'); document.getElementById('unitKg').classList.remove('active'); renderAll(); });
+  on('tableSearch','input', () => renderTable(getFilteredAudits()));
+  on('modalClose','click', closeModal);
+  on('modalBackdrop','click', e => { if (e.target.id === 'modalBackdrop') closeModal(); });
+
+  fetchAll();
+  setupAutoRefresh();
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
